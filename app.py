@@ -1,6 +1,6 @@
 import streamlit as st
-# from streamlit_chat import message as st_message  # 引入streamlit-chat的message组件
-from st_chat_message import message as st_message
+from streamlit_chat import message as st_message  # 引入streamlit-chat的message组件
+# from st_chat_message import message as st_message
 from langchain.chains import RetrievalQA
 from langchain.prompts.prompt import PromptTemplate
 from langchain_community.vectorstores import FAISS
