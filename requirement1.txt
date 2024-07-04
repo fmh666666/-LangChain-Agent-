@@ -1,0 +1,15 @@
+langchain
+langchain_community
+pandas
+streamlit
+streamlit-chat
+unstructured
+qianfan
+zhipuai
+gradio
+modelscope
+chromadb
+markdown
+psutil
+networkx
+transformers

@@ -7,15 +7,18 @@ from langchain_community.vectorstores import FAISS
 from LoadVector import DocumentService
 import pandas as pd
 from LLM_API import ChatZhipuAI
-from config import zhipuai_api_key,vector_store_path
+from config import zhipuai_api_key,vector_store_path,qianfan_ak,qianfan_sk,model_embed,endpoint_embed
 from zhipuai import ZhipuAI
+from langchain_community.llms import QianfanLLMEndpoint
+import os
 
 @st.cache_resource
-def LLM_API(user_query):
+def LLM_API(user_query,system_prompt):
     client = ZhipuAI(api_key=zhipuai_api_key)
     response = client.chat.completions.create(
     model="glm-4",  # 填写需要调用的模型名称
     messages=[
+        {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_query},
     ],
     )
@@ -24,11 +27,15 @@ def LLM_API(user_query):
 @st.cache_resource
 def init_LLM():
     LLM = ChatZhipuAI(
-    temperature=0.1,
+    temperature=0.95,# 这个值越大生成内容越随机，多样性更好
+    top_p=0.95,# 单步累计采用阈值，越大越多token会被考虑
     api_key=zhipuai_api_key,
     model_name="glm-4",
     )
 
+    os.environ["QIANFAN_AK"] = qianfan_ak
+    os.environ["QIANFAN_SK"] = qianfan_sk
+    LLM = QianfanLLMEndpoint(model='ERNIE-Bot-4',temperature=0.8)
     return LLM
 
 #@st.cache_data
@@ -41,16 +48,17 @@ def init_data(vector_store_path,docs_paths):
 
     return doc_service
 
-
-def init_RetrievalQA(LLM,doc_service):
-    
-    prompt_template = """基于以下已知信息，回答用户的问题。
-                                    如果无法从中得到答案，请说 "根据已知信息无法回答该问题" 或 "没有提供足够的相关信息"，不允许在答案中添加编造成分，答案请使用中文。
-                                    已知内容:
+def prompt_template(system):
+    str_system=f"你是一个{system}小助手，你的任务是为用户提供专业、准确、有见地的建议。"
+    prompt_template = str_system+"""请根据已知内容:
                                     {context}
-                                    问题:
+                                    回答下面问题:
                                     {question}"""
     prompt = PromptTemplate(template=prompt_template, input_variables=["context", "question"])
+    return prompt
+
+def init_RetrievalQA(LLM,doc_service,prompt):
+    
     knowledge_chain = RetrievalQA.from_llm(llm=LLM,retriever=doc_service.load_vector_store(),prompt=prompt)
     knowledge_chain.combine_documents_chain.document_prompt = PromptTemplate(input_variables=["page_content"], template="{page_content}")
     
@@ -64,7 +72,7 @@ def main():
     # 当accept_multiple_files=True，返回的uploaded_files为一个list
     uploaded_files = st.sidebar.file_uploader("选择文档文件", type=['txt','md'], accept_multiple_files=True,help="支持txt、csv、md文件格式")
 
-    st.title("本地知识库问答机器人")
+    st.title("智能小助手")
     # 使用streamlit-chat来管理对话历史
     if 'dialogues' not in st.session_state:
         st.session_state.dialogues = []
@@ -80,12 +88,14 @@ def main():
                 file.write(docs_content)
             docs_paths.append(text_path)
 
+    system="推免"
     if len(uploaded_files) == 0:
         knowledge_chain = LLM_API
     else:
         LLM=init_LLM()
         doc_service=init_data(vector_store_path,docs_paths)
-        knowledge_chain = init_RetrievalQA(LLM,doc_service)
+        prompt=prompt_template(system)
+        knowledge_chain = init_RetrievalQA(LLM,doc_service,prompt)
 
     # 对话显示和输入逻辑改为使用streamlit-chat
     # 显示对话历史
@@ -102,7 +112,8 @@ def main():
         # 假设知识链已经被正确初始化
         result_txt = "无法找到答案，请稍后再试。"
         if len(uploaded_files) == 0:
-            result_txt = knowledge_chain(user_query)
+            system_prompt=f"你是一个{system}小助手，你的任务是为用户提供专业、准确、有见地的建议。"
+            result_txt = knowledge_chain(user_query,system_prompt)
         else:
             result = knowledge_chain.invoke({"query": user_query})
             result_txt = result['result']

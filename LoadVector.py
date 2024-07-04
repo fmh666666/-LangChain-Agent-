@@ -34,7 +34,7 @@ class DocumentService(object):
             documents=split_text, 
             embedding=self.embeddings, 
             persist_directory=self.vector_store_path
-            )
+        )
         # # 采用embeding模型对文本进行向量化
         # self.vector_store = FAISS.from_documents(split_text, self.embeddings)
         # # 把结果存到faiss索引里面
